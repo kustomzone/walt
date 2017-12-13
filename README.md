@@ -38,7 +38,7 @@ should be able to edit WebAssembly as easily as any other systems programmer.
 Provide a **thin layer** of syntax sugar on top of `.wat` text format. Preferably porting as much of JavaScript syntax to WebAssembly as possible. This improved syntax should give direct control over
 the WebAssembly output. Meaning there should be minimal to none post optimization to be done to the wast code generated. The re-use of JavaScript semantics is intentional as I do not wish to create a brand new language.
 
-Here is what an example of a `.walt` module which exports a recursive fibonacci function looks like:
+Here is what an example of a `.walt` module which exports a recursive Fibonacci function looks like:
 
 ```js
 export function fibonacci(n: i32): i32 {
@@ -94,7 +94,7 @@ When this code is ran through the walt compiler you end up with a buffer which c
   * [x] Arrays
   * [x] Memory
   * [x] Custom _Object_ Types
-* Emiter - WIP
+* Emitter - WIP
   * [x] ~Exports~
   * [x] ~Functions~
   * [x] ~Types - wasm built ins(i32/f32)~
@@ -126,11 +126,11 @@ All s-expression-syntax words are reserved and can be written directly into `.wa
 
 ## Syntax
 
-Initial gramar definition is provided in the `/docs/gramar.md`
+Initial grammar definition is provided in the `/docs/grammar.md`
 
 ### Statements and Expressions
 
-WAlt splits its syntax into statements and expressions(like JavaScript).
+WAlt splits its syntax into statements and expressions (like JavaScript).
 
 ### Comments
 
@@ -141,12 +141,12 @@ WAlt will support C99 style comments. Inline comments are supported currently ('
 
 Everything in WAlt as in WebAssembly must have a Type. Function are no exception to the rule. When a function is declared it's type is hoisted by the compiler behind the scenes. A function type is a list of parameters and a result type.
 
-:unicorn: Currently a custom functon type syntax is not implemented, but is required in order to use custom-function imports.
+:unicorn: Currently a custom function type syntax is not implemented, but is required in order to use custom-function imports.
 ```javascript
 import { log: Log } from 'console';
 type Log = (i32) => void
 ```
-:unicorn: **Arror Functions**. _Might be implemented._
+:unicorn: **Arrow Functions**. _Might be implemented._
 
 ### Function imports and pointers
 
@@ -241,7 +241,7 @@ someOtherFunction(foo); // (i32) => void
 
 Every WAlt file is compiled into a stand alone module. `module` is a reserved keyword
 
-### Improting WAlt from JavaScript
+### Importing WAlt from JavaScript
 
 With an implemented loader it will be possible to pipe the output to `wasm-loader` allowing for code like this:
 
