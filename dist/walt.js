@@ -1426,6 +1426,8 @@ function patchTypeCasts(node) {
   })(node);
 }
 
+
+
 const balanceTypesInMathExpression = expression => {
   // For top-level pairs, just do a mapping to convert to a typecast
   if (expression.Type === Syntax_1.Pair) {
@@ -1652,6 +1654,20 @@ function binary(ctx, op, params) {
   return balanceTypesInMathExpression(ctx.endNode(node, Type));
 }
 
+const unary = (ctx, op, params) => {
+  const [target] = params;
+  return _extends({}, target, {
+    Type: Syntax_1.BinaryExpression,
+    value: "-",
+    params: [_extends({}, target, {
+      value: "0",
+      Type: Syntax_1.Constant,
+      params: [],
+      meta: []
+    }), target]
+  });
+};
+
 function objectLiteral(ctx, op, params) {
   const node = ctx.startNode(op);
   node.params = params;
@@ -1689,7 +1705,8 @@ const sequence = (ctx, op, params) => {
 };
 
 // Abstraction for handling operations
-const operator = (ctx, op, operands) => {
+const operator = (ctx, operators, operands) => {
+  const op = operators.pop();
   switch (op.value) {
     case "?":
       return ternary(ctx, op, operands.splice(-2));
@@ -1697,8 +1714,12 @@ const operator = (ctx, op, operands) => {
       return sequence(ctx, op, operands.slice(-2));
     case "{":
       return objectLiteral(ctx, op, operands.splice(-1));
+    case "--":
+      return unary(ctx, op, operands.splice(-1));
     default:
-      if (op.type === Syntax_1.FunctionCall) return functionCall(ctx, op, operands);
+      if (op.type === Syntax_1.FunctionCall) {
+        return functionCall(ctx, op, operands);
+      }
       return binary(ctx, op, operands.splice(-2));
   }
 };
@@ -1825,8 +1846,9 @@ const expression = (ctx, type = "i32", check = predicate) => {
   let depth = 1;
   let eatFunctionCall = false;
   let inTernary = false;
+  let previousToken = null;
 
-  const consume = () => operands.push(operator(ctx, operators.pop(), operands));
+  const consume = () => operands.push(operator(ctx, operators, operands));
 
   const eatUntil = condition => {
     let prev = last(operators);
@@ -1845,104 +1867,138 @@ const expression = (ctx, type = "i32", check = predicate) => {
     }
   };
 
-  const process = () => {
-    if (ctx.token.type === Syntax_1.Constant) {
-      eatFunctionCall = false;
-      operands.push(parseConstant(ctx));
-    } else if (ctx.token.type === Syntax_1.Identifier) {
-      eatFunctionCall = true;
-      operands.push(maybeIdentifier(ctx));
-    } else if (ctx.token.type === Syntax_1.StringLiteral) {
-      eatFunctionCall = false;
-      operands.push(stringLiteral(ctx));
-    } else if (ctx.token.type === Syntax_1.Type) {
-      eatFunctionCall = false;
-      operands.push(builtInType(ctx));
-    } else if (ctx.token.type === Syntax_1.UnaryExpression) {
-      eatFunctionCall = false;
-      flushOperators(getPrecedence(ctx.token), ctx.token.value);
-      operators.push(ctx.token);
-    } else if (ctx.token.type === Syntax_1.Punctuator) {
-      switch (ctx.token.value) {
-        case "(":
-          depth++;
-          // Function call.
-          // TODO: figure out a cleaner(?) way of doing this, maybe
-          if (eatFunctionCall) {
-            // definetly not immutable
-            last(operands).Type = Syntax_1.FunctionIdentifier;
-            flushOperators(PRECEDENCE_FUNCTION_CALL);
-            // Tokenizer does not generate function call tokens it is our job here
-            // to generate a function call on the fly
-            operators.push(_extends({}, ctx.token, {
-              type: Syntax_1.FunctionCall
-            }));
-            ctx.next();
-            const expr = expression(ctx);
-            if (expr) operands.push(expr);
-            return false;
-          } else {
-            if (ctx.token.value === "?") {
-              inTernary = true;
-            }
-            operators.push(ctx.token);
+  const processPunctuator = () => {
+    switch (ctx.token.value) {
+      case "(":
+        depth++;
+        // Function call.
+        // TODO: figure out a cleaner(?) way of doing this, maybe
+        if (eatFunctionCall) {
+          // definetly not immutable
+          last(operands).Type = Syntax_1.FunctionIdentifier;
+          flushOperators(PRECEDENCE_FUNCTION_CALL);
+          // Tokenizer does not generate function call tokens it is our job here
+          // to generate a function call on the fly
+          operators.push(_extends({}, ctx.token, {
+            type: Syntax_1.FunctionCall
+          }));
+          ctx.next();
+          const expr = expression(ctx);
+          if (expr) {
+            operands.push(expr);
           }
-          break;
-        case "[":
-          depth++;
-          operators.push(ctx.token);
-          break;
-        case "]":
-          depth--;
-          eatUntil(isLSqrBracket);
-          consume();
-          break;
-        case ")":
-          {
-            depth--;
-            if (depth < 1) return false;
-            // If we are not in a group already find the last LBracket,
-            // consume everything until that point
-            eatUntil(isLBracket);
-            const previous = last(operators);
-            if (previous && previous.type === Syntax_1.FunctionCall) consume();else if (depth > 0)
-              // Pop left bracket
-              operators.pop();
-
-            break;
+          return false;
+        } else {
+          if (ctx.token.value === "?") {
+            inTernary = true;
           }
-        case "{":
-          depth++;
           operators.push(ctx.token);
-          break;
-        case "}":
+        }
+        break;
+      case "[":
+        depth++;
+        operators.push(ctx.token);
+        break;
+      case "]":
+        depth--;
+        eatUntil(isLSqrBracket);
+        consume();
+        break;
+      case ")":
+        {
           depth--;
           if (depth < 1) {
             return false;
           }
-          eatUntil(isBlockStart);
-          consume();
+          // If we are not in a group already find the last LBracket,
+          // consume everything until that point
+          eatUntil(isLBracket);
+          const previous = last(operators);
+          if (previous && previous.type === Syntax_1.FunctionCall) {
+            consume();
+          } else if (depth > 0) {
+            // Pop left bracket
+            operators.pop();
+          }
+
           break;
-        default:
-          {
-            if (ctx.token.value === ":" && inTernary) {
-              eatUntil(isTStart);
-              inTernary = false;
-              break;
+        }
+      case "{":
+        depth++;
+        operators.push(ctx.token);
+        break;
+      case "}":
+        depth--;
+        if (depth < 1) {
+          return false;
+        }
+        eatUntil(isBlockStart);
+        consume();
+        break;
+      default:
+        {
+          if (ctx.token.value === ":" && inTernary) {
+            eatUntil(isTStart);
+            inTernary = false;
+            break;
+          }
+
+          const token = (t => {
+            if (t.value === "-" && previousToken == null || t.value === "-" && previousToken !== null && previousToken.type === Syntax_1.Punctuator && previousToken.value !== "]" && previousToken.value !== ")") {
+              return _extends({}, t, {
+                value: "--"
+              });
             }
 
-            flushOperators(getPrecedence(ctx.token), ctx.token.value);
-            operators.push(ctx.token);
-          }
-      }
-      eatFunctionCall = false;
+            return t;
+          })(ctx.token);
+
+          flushOperators(getPrecedence(token), token.value);
+          operators.push(token);
+        }
+    }
+  };
+
+  const process = () => {
+    switch (ctx.token.type) {
+      case Syntax_1.Constant:
+        eatFunctionCall = false;
+        operands.push(parseConstant(ctx));
+        break;
+      case Syntax_1.Identifier:
+        eatFunctionCall = true;
+        operands.push(maybeIdentifier(ctx));
+        break;
+      case Syntax_1.StringLiteral:
+        eatFunctionCall = false;
+        operands.push(stringLiteral(ctx));
+        break;
+      case Syntax_1.Type:
+        eatFunctionCall = false;
+        operands.push(builtInType(ctx));
+        break;
+      case Syntax_1.UnaryExpression:
+        eatFunctionCall = false;
+        flushOperators(getPrecedence(ctx.token), ctx.token.value);
+        operators.push(ctx.token);
+        break;
+      case Syntax_1.Punctuator:
+        const punctuatorResult = processPunctuator();
+        if (punctuatorResult != null) {
+          return punctuatorResult;
+        }
+        eatFunctionCall = false;
+        break;
     }
 
     return true;
   };
 
   while (ctx.token && check(ctx.token, depth)) {
-    if (process()) ctx.next();
+    if (process()) {
+      previousToken = ctx.token;
+      ctx.next();
+    }
   }
 
   while (operators.length) consume();
@@ -2041,7 +2097,7 @@ function generateType(node) {
   invariant_1(typeof node.id === "string", `Generator: A type must have a valid string identifier, node: ${JSON.stringify(node)}`);
 
   const typeExpression = node.params[0];
-  invariant_1(typeExpression && typeExpression.Type === Syntax_1.BinaryExpression, `Generator: A function type must be of for (<type>, ...) => <type> node: ${JSON.stringify(node)}`);
+  invariant_1(typeExpression && typeExpression.Type === Syntax_1.BinaryExpression, `Generator: A function type must be of form (<type>, ...) => <type> node: ${printNode(node)}`);
 
   // Collect the function params and result by walking the tree of nodes
   const params = [];
@@ -2480,9 +2536,13 @@ const maybeFunctionDeclaration = ctx => {
   node.id = ctx.expect(null, Syntax_1.Identifier).value;
   node.params = paramList(ctx);
   node.locals = [...node.params];
-  ctx.expect([":"]);
-  node.result = ctx.expect(null, Syntax_1.Type).value;
-  node.result = node.result === "void" ? null : node.result;
+
+  if (ctx.eat([":"])) {
+    node.result = ctx.expect(null, Syntax_1.Type).value;
+    node.result = node.result === "void" ? null : node.result;
+  } else {
+    node.result = null;
+  }
 
   // NOTE: We need to write function into Program BEFORE
   // we parse the body as the body may refer to the function

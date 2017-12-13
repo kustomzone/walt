@@ -51,9 +51,13 @@ const maybeFunctionDeclaration = ctx => {
   node.id = ctx.expect(null, Syntax.Identifier).value;
   node.params = paramList(ctx);
   node.locals = [...node.params];
-  ctx.expect([":"]);
-  node.result = ctx.expect(null, Syntax.Type).value;
-  node.result = node.result === "void" ? null : node.result;
+
+  if (ctx.eat([":"])) {
+    node.result = ctx.expect(null, Syntax.Type).value;
+    node.result = node.result === "void" ? null : node.result;
+  } else {
+    node.result = null;
+  }
 
   // NOTE: We need to write function into Program BEFORE
   // we parse the body as the body may refer to the function

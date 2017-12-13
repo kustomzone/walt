@@ -42,6 +42,11 @@ test("undefined function vars", t =>
     }`);
   }));
 
+test("void result type is optional", () =>
+  compileAndRun(`
+  export function test() {
+  }`));
+
 test("function pointers", t => {
   const table = new WebAssembly.Table({ element: "anyfunc", initial: 10 });
   return compileAndRun(

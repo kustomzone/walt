@@ -66,6 +66,73 @@ function patchTypeCasts(node: NodeType): NodeType {
   })(node);
 }
 
+export const patchUnaryExpression = (node: NodeType): NodeType => {
+  //return node;
+  return mapNode({
+    [Syntax.BinaryExpression]: (binaryNode: NodeType): NodeType => {
+      const { params, value } = binaryNode;
+      // If we got ourselves a binary expression with rhs only, then
+      // if operator is - multiply by -1
+      // if anything else drop the expressions and convert to rhs
+      if (params.length === 1) {
+        const [target] = params;
+        if (value === "-") {
+          return {
+            ...binaryNode,
+            value: "*",
+            params: [
+              target,
+              {
+                ...target,
+                value: "-1",
+                Type: Syntax.Constant,
+                params: [],
+                meta: []
+              }
+            ]
+          };
+        }
+
+        if (value !== "=>" && value !== "=") {
+          return target;
+        }
+      }
+
+      return binaryNode;
+    },
+    [Syntax.Assignment]: (assignmentNode: NodeType): NodeType => {
+      const { params } = assignmentNode;
+      if (params.length === 1) {
+        // re-balance the params
+        const [rhs, lhs] = params[0].params;
+
+        return {
+          ...assignmentNode,
+          params: [
+            rhs,
+            {
+              ...lhs,
+              Type: Syntax.BinaryExpression,
+              value: "*",
+              params: [
+                lhs,
+                {
+                  ...lhs,
+                  value: "-1",
+                  Type: Syntax.Constant,
+                  params: [],
+                  meta: []
+                }
+              ]
+            }
+          ]
+        };
+      }
+      return assignmentNode;
+    }
+  })(node);
+};
+
 export const balanceTypesInMathExpression = (
   expression: NodeType
 ): NodeType => {
