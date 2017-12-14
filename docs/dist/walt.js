@@ -1422,8 +1422,6 @@ function patchTypeCasts(node) {
   })(node);
 }
 
-
-
 const balanceTypesInMathExpression = expression => {
   // For top-level pairs, just do a mapping to convert to a typecast
   if (expression.Type === Syntax_1.Pair) {
