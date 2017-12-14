@@ -38,8 +38,7 @@ export function onInit(totalParticles: i32) {
   }
 }
 
-function bounce(particlePtr: i32, min: f32) {
-  const particle: ParticleType = particlePtr;
+function bounce(particle: ParticleType, min: f32) {
   const maxHeight: f32 = height - min;
   const maxWidth: f32 = width - min;
 

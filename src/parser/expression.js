@@ -21,6 +21,8 @@ const isLBracket = valueIs("(");
 const isLSqrBracket = valueIs("[");
 const isTStart = valueIs("?");
 const isBlockStart = valueIs("{");
+export const isPunctuatorAndNotBracket = (t: ?Token) =>
+  t && t.type === Syntax.Punctuator && t.value !== "]" && t.value !== ")";
 
 export const predicate = (token: Token, depth: number): boolean =>
   token.value !== ";" && depth > 0;
@@ -143,11 +145,7 @@ const expression = (
         const token = (t => {
           if (
             (t.value === "-" && previousToken == null) ||
-            (t.value === "-" &&
-              previousToken !== null &&
-              previousToken.type === Syntax.Punctuator &&
-              previousToken.value !== "]" &&
-              previousToken.value !== ")")
+            (t.value === "-" && isPunctuatorAndNotBracket(previousToken))
           ) {
             return {
               ...t,

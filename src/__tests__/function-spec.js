@@ -72,3 +72,18 @@ test("function pointers", t => {
     }
   ).then(outputIs(t, 42));
 });
+
+test("pointers as function arguments", t =>
+  compileAndRun(`
+  type Type = { 'a': i32 };
+  const memory: Memory = { 'initial': 1 };
+
+  function addOne(ptr: Type) {
+    ptr['a'] += 1;
+  }
+  export function test(): i32 {
+    let original: Type = 0;
+    original['a'] = 4;
+    addOne(original);
+    return original['a'];
+  }`).then(outputIs(t, 5)));

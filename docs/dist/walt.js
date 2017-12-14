@@ -188,14 +188,10 @@ var Syntax_1 = Syntax;
 const supported = ["+", "++", "-", "--", "=", "==", "+=", "-=", "=>", "<=", "!=", "%", "/", "^", "&", "|", "!", "**", ":", "(", ")", ".", "{", "}", ",", "[", "]", ";", ">", "<", "?"];
 
 const trie = new trie$1(supported);
-var index = token(trie.fsearch, Syntax_1.Punctuator, supported);
+var punctuator = token(trie.fsearch, Syntax_1.Punctuator, supported);
 
-var index$1 = createCommonjsModule(function (module) {
-const { isNaN, parseInt } = Number;
-
-
-
-const isNumber = char => !isNaN(parseInt(char));
+const { isNaN, parseInt: parseInt$1 } = Number;
+const isNumber = char => !isNaN(parseInt$1(char));
 const isDot = char => char === ".";
 const number = char => isNumber(char) ? number : null;
 const numberOrDot = char => {
@@ -216,8 +212,8 @@ const root = char => {
 };
 
 // TODO: split constants into literals String vs Numbers with Types
-module.exports = token(root, Syntax_1.Constant);
-});
+// TODO: figure out what above means??
+var constant = token(root, Syntax_1.Constant);
 
 const quoteOK = quoteCheck => () => quoteCheck;
 const nextFails = () => null;
@@ -247,7 +243,7 @@ const stringParser = token(maybeQuote, Syntax_1.StringLiteral);
 
 const parse = char => {
   // Don't allow these
-  if (!stringParser(char) && !index(char) && !index$1(char) && char !== " ") return parse;
+  if (!stringParser(char) && !punctuator(char) && !constant(char) && char !== " ") return parse;
   return null;
 };
 const tokenParser = token(parse, Syntax_1.Identifier);
@@ -272,9 +268,9 @@ const supported$1 = [
 
 
 const trie$2 = new trie$1(supported$1);
-const root = trie$2.fsearch;
+const root$1 = trie$2.fsearch;
 
-var keyword = token(root, Syntax_1.Keyword, supported$1);
+var keyword = token(root$1, Syntax_1.Keyword, supported$1);
 
 const everything = () => everything;
 
@@ -292,10 +288,10 @@ const commentParser = token(maybeComment, Syntax_1.Comment);
 
 const supported$2 = ["i32", "i64", "f32", "f64", "Function", "Memory", "void"];
 const trie$3 = new trie$1(supported$2);
-var index$2 = token(trie$3.fsearch, Syntax_1.Type, supported$2);
+var type = token(trie$3.fsearch, Syntax_1.Type, supported$2);
 
 class Tokenizer {
-  constructor(stream, parsers = [index, index$1, tokenParser, keyword, stringParser, index$2, commentParser]) {
+  constructor(stream, parsers = [punctuator, constant, tokenParser, keyword, stringParser, type, commentParser]) {
     if (!(stream instanceof Stream)) this.die(`Tokenizer expected instance of Stream in constructor.
                 Instead received ${JSON.stringify(stream)}`);
     this.stream = stream;
@@ -393,7 +389,7 @@ class Tokenizer {
   }
 }
 
-var index$3 = createCommonjsModule(function (module) {
+var index = createCommonjsModule(function (module) {
 /* eslint-env es6 */
 /**
  * WASM types
@@ -524,14 +520,14 @@ module.exports = {
 };
 });
 
-var index_1 = index$3.i32;
-var index_2 = index$3.i64;
-var index_3 = index$3.f32;
-var index_4 = index$3.f64;
-var index_9 = index$3.u8;
-var index_12 = index$3.u32;
-var index_14 = index$3.set;
-var index_16 = index$3.sizeof;
+var index_1 = index.i32;
+var index_2 = index.i64;
+var index_3 = index.f32;
+var index_4 = index.f64;
+var index_9 = index.u8;
+var index_12 = index.u32;
+var index_14 = index.set;
+var index_16 = index.sizeof;
 
 //      
 /**
@@ -1833,6 +1829,7 @@ const isLBracket = valueIs("(");
 const isLSqrBracket = valueIs("[");
 const isTStart = valueIs("?");
 const isBlockStart = valueIs("{");
+const isPunctuatorAndNotBracket = t => t && t.type === Syntax_1.Punctuator && t.value !== "]" && t.value !== ")";
 
 const predicate = (token, depth) => token.value !== ";" && depth > 0;
 
@@ -1944,7 +1941,7 @@ const expression = (ctx, type = "i32", check = predicate) => {
           }
 
           const token = (t => {
-            if (t.value === "-" && previousToken == null || t.value === "-" && previousToken !== null && previousToken.type === Syntax_1.Punctuator && previousToken.value !== "]" && previousToken.value !== ")") {
+            if (t.value === "-" && previousToken == null || t.value === "-" && isPunctuatorAndNotBracket(previousToken)) {
               return _extends({}, t, {
                 value: "--"
               });
@@ -2500,12 +2497,19 @@ const param = ctx => {
   ctx.expect([":"]);
 
   // maybe a custom type
-  const identifier = ctx.token.value;
+  const { value } = ctx.token;
   if (ctx.eat(null, Syntax_1.Identifier)) {
     // find the type
-    node.typePointer = ctx.Program.Types.find(({ id }) => id === identifier);
-    if (node.typePointer == null) throw ctx.syntaxError("Undefined Type", identifier);
+    const typePointer = ctx.Program.Types.find(({ id }) => id === value);
+    const userType$$1 = ctx.userTypes[findUserTypeIndex(ctx, { value })];
+    if (userType$$1) {
+      node.meta.push(metadata.userType(userType$$1));
+    }
+    if (typePointer == null && !userType$$1) {
+      throw ctx.syntaxError("Undefined Type", value);
+    }
 
+    node.typePointer = typePointer;
     node.type = "i32";
   } else {
     node.type = ctx.expect(null, Syntax_1.Type).value;
@@ -2870,7 +2874,7 @@ const returnStatement = ctx => {
 
   // For generator to emit correct consant they must have a correct type
   // in the syntax it's not necessary to define the type since we can infer it here
-  if (expr.type && ctx.func.result !== expr.type) throw ctx.syntaxError(`Return type mismatch ${expr.type} ${ctx.func.result}`);else if (!expr.type && ctx.func.result) expr.type = ctx.func.result;
+  if (expr.type && ctx.func.result !== expr.type) throw ctx.syntaxError(`Return type mismatch expected ${ctx.func.result}, got ${expr.type}`);else if (!expr.type && ctx.func.result) expr.type = ctx.func.result;
 
   node.params.push(expr);
 
@@ -3402,11 +3406,11 @@ const emit$2 = exports => {
   const payload = new OutputStream();
   payload.push(varuint32, exports.length, 'count');
 
-  exports.forEach(({ field, kind, index }) => {
+  exports.forEach(({ field, kind, index: index$$1 }) => {
     emitString(payload, field, 'field');
 
     payload.push(index_9, kind, 'Global');
-    payload.push(varuint32, index, 'index');
+    payload.push(varuint32, index$$1, 'index');
   });
 
   return payload;
@@ -3475,10 +3479,10 @@ const writer = ({ type, label, emiter }) => ast => {
 };
 
 //      
-const emitElement = stream => ({ functionIndex }, index) => {
+const emitElement = stream => ({ functionIndex }, index$$1) => {
   stream.push(varuint32, 0, "table index");
   stream.push(index_9, def.i32Const.code, "offset");
-  stream.push(varuint32, index, "");
+  stream.push(varuint32, index$$1, "");
   stream.push(index_9, def.End.code, "end");
   stream.push(varuint32, 1, "number of elements");
   stream.push(varuint32, functionIndex, "function index");

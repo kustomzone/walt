@@ -4,7 +4,8 @@ import generateCode from "../generator";
 import { findTypeIndex } from "./introspection";
 import statement from "./statement";
 import declaration from "./declaration";
-import { make, FUNCTION_INDEX } from "./metadata";
+import { findUserTypeIndex } from "./introspection";
+import metadata, { make, FUNCTION_INDEX } from "./metadata";
 
 const last = list => list[list.length - 1];
 
@@ -14,13 +15,19 @@ const param = ctx => {
   ctx.expect([":"]);
 
   // maybe a custom type
-  const identifier = ctx.token.value;
+  const { value } = ctx.token;
   if (ctx.eat(null, Syntax.Identifier)) {
     // find the type
-    node.typePointer = ctx.Program.Types.find(({ id }) => id === identifier);
-    if (node.typePointer == null)
-      throw ctx.syntaxError("Undefined Type", identifier);
+    const typePointer = ctx.Program.Types.find(({ id }) => id === value);
+    const userType = ctx.userTypes[findUserTypeIndex(ctx, { value })];
+    if (userType) {
+      node.meta.push(metadata.userType(userType));
+    }
+    if (typePointer == null && !userType) {
+      throw ctx.syntaxError("Undefined Type", value);
+    }
 
+    node.typePointer = typePointer;
     node.type = "i32";
   } else {
     node.type = ctx.expect(null, Syntax.Type).value;
